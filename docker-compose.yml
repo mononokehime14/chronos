@@ -1,0 +1,12 @@
+version: '3'
+services:
+    notebook:
+        build:
+            context: .
+            dockerfile: docker/Dockerfile
+        command: ["jupyter", "notebook", "--no-browser", "--ip=0.0.0.0", "--port=8080", "--allow-root"]
+        volumes:
+            - ./notebook:/notebook
+        ports:
+            - "8080:8080"
+        working_dir: /notebook

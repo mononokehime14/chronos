@@ -4,4 +4,20 @@ This repo contains a documented notebook duplicating the data processing, model 
 
 ## Requirements
 
-To be consistent with what currently gets deployed, we use Python 3.7.4. The rest of the requirements are in `requirements.txt`.
+1. docker
+2. docker-compose 
+3. Python 3.7.4 (if you are not running locally)
+
+## Run this notebook with docker-compose
+
+`$ make notebook`
+
+The notebook server will be accessible at http://localhost:8080/
+
+## Run this notebook locally
+
+1. Make sure your Python environment is 3.7.4
+2. `$ python -r notebook/requirements.txt`
+3. `$ jupyter notebook --no-browser --ip=0.0.0.0 --port=8080`
+
+The notebook server will be accessible at http://localhost:8080/
