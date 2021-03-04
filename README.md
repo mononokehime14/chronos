@@ -12,7 +12,7 @@ This repo contains a documented notebook duplicating the data processing, model 
 
 ### Run the notebook
 
-`$ make notebook`
+`$ make container`
 
 The notebook server will be accessible at http://localhost:8080/
 
@@ -21,10 +21,9 @@ The notebook server will be accessible at http://localhost:8080/
 ### Requirements
 
 1. Python 3.7.4
-2. `$ python -r notebook/requirements.txt`
 
 ### Run the notebook
 
-1. `$ jupyter notebook --no-browser --ip=0.0.0.0 --port=8080`
+1. `make local`
 
 The notebook server will be accessible at http://localhost:8080/
