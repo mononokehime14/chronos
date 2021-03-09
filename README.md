@@ -1,6 +1,6 @@
 # Chronos+ Data Science Handover notebook
 
-This repo contains a documented notebook duplicating the data processing, model training and scoring processes in Chronos+ with all the pure engineering parts such as database access and job queueing stripped out.
+This repo contains a documented notebook duplicating the data processing, model training and scoring processes in Chronos+ with all the pure engineering parts such as database access and job queueing stripped out. The notebook is at `notebook/Chronos+ Handover.ipynb`.
 
 
 ## Run this notebook locally with docker-compose
