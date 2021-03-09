@@ -3,7 +3,7 @@
 This repo contains a documented notebook duplicating the data processing, model training and scoring processes in Chronos+ with all the pure engineering parts such as database access and job queueing stripped out.
 
 
-## Run this notebook with docker-compose
+## Run this notebook locally with docker-compose
 
 ### Requirements
 
@@ -16,7 +16,7 @@ This repo contains a documented notebook duplicating the data processing, model 
 
 The notebook server will be accessible at http://localhost:8080/
 
-## Run this notebook without docker-compose
+## Run this notebook locally without docker-compose
 
 ### Requirements
 
@@ -27,3 +27,12 @@ The notebook server will be accessible at http://localhost:8080/
 1. `make local`
 
 The notebook server will be accessible at http://localhost:8080/
+
+## Run this notebook on some remote Jupyter server
+
+### Requirements
+
+1. Notebook server is being run on Python 3.7.4
+2. Connect to the server
+3. Upload the `notebook` directory
+4. Install the requirements in `notebook/requirements.txt`
