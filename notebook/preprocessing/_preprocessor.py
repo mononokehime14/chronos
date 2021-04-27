@@ -17,15 +17,28 @@ dscol = "Time"
 ycols = ["SA1900282"]
 
 #general class for all
-class AdamEstimator:
+class Adam:
     """Base class for all preprocessing transformers"""
-    def fit_transform(self, X, y=None, **fit_params):
-        if y is None:
-            # fit method of arity 1 (unsupervised transformation)
-            return self.fit(X, **fit_params).transform(X)
-        else:
-            # fit method of arity 2 (supervised transformation)
-            return self.fit(X, y, **fit_params).transform(X)
+    def __init__(self):
+        self.name = 'adam'
+    
+    def _validate_params(self, name, df, **params):
+        print(name + '正在检查')
+        if df.empty:
+            raise DataError(f'Dataframe is empty! Error occur at {name} step.')
+        if not params:
+            raise ParamsError(f'Empty params! Error occur at {name} step.')
+        if 'minfreq' not in params:
+            raise ParamsError(f'Lack minimal frequency data. Please ensure you called FindFrequency. Current step: {name}')
+        if 'colfreqs' not in params:
+            raise ParamsError(f'Lack column frequencies data. Please ensure you called FindFrequency.Current step: {name}')
+        if name in ['drop_extrema', 'normalizer', 'fill_gap']:
+            if 'period' not in params:
+                raise ParamsError(f'Lack column period data. Please ensure you called PeriodDetect.Current step: {name}')
+        if name in ['normalizer','fill_gap']:
+            if 'zeropoint' not in params:
+                raise ParamsError(f'Lack column zeropoint data. Please ensure you called AlignData.Current step: {name}')
+       
 
 class ParamsError(Exception):
     def __init__(self, message, *args, **kwargs):
@@ -34,7 +47,6 @@ class ParamsError(Exception):
 class DataError(Exception):
     pass
 
-#ingesting part
 class MissingColumnError(Exception):
     def __init__(self, col, *args, **kwargs):
         self.column = col
@@ -49,16 +61,24 @@ class NoPeriodError(Exception):
 class MisalignedColumnsError(Exception):
     pass
 
-class LoadData():
+
+class LoadData(Adam):
     def __init__(self, data_path = csv_path):
+        super().__init__()
         self.data_path = data_path
         self.name = 'load_data'
+    
+    def _validate_params(self):
+        if len(self.data_path) == 0:
+            raise ValueError("The data path is empty, cannot load data.")
 
     def fit_transform(self):
+        self._validate_params()
         _data_path = self.data_path
 
-        if len(_data_path) == 0:
-            raise ValueError("The data path is empty")
+        # if len(_data_path) == 0:
+        #     raise ValueError("The data path is empty")
+
         # x = os.getcwd()
         # print(x)
         # dirname = os.getcwd()
@@ -120,7 +140,7 @@ def detect_ds_frequency(df):
     threshold = len(deltas)/2
     delta_counts = deltas.value_counts()
     modal_delta = delta_counts.index[0]  # [ANDY] modal_delta = delta_counts.index[0]
-    mdcount = delta_counts[modal_delta]  # mdcount = delta_counts.iloc[0]
+    mdcount = delta_counts.iloc[0]  # mdcount = delta_counts.iloc[0]
 
     if mdcount > threshold:
         return delta_counts.head(1)
@@ -144,25 +164,18 @@ def check_sparse_cols(df, colfreqs):
         if numpoints < expected:
             raise SparseColumnError(f"column {y} has frequency {freq} and {numpoints} points, but duration of dataset is {totalduration}")
 
-def check_params(params):
-    if not params:
-        raise ParamsError('Empty params! May not be able to proceed.')
-
-    if 'minfreq' not in params:
-        raise ParamsError('Lack minimal frequency data. Please ensure you called FindFrequency.')
-
-    if 'colfreqs' not in params:
-        raise ParamsError('Lack column frequencies data. Please ensure you called FindFrequency.')
-
-def check_df(df):
-    if df.empty:
-        raise DataError('Dataframe is empty! May not be able to proceed.')
     
-class FindFrequency():
+class FindFrequency(Adam):
     def __init__(self):
+        super().__init__()
         self.name = 'find_frequency'
     
+    def _validate_params(self, df, **params):
+        if df.empty:
+            raise DataError('Dataframe is empty! Error occur at Find Frequency part.')
+    
     def fit_transform(self, df, **params):
+        self._validate_params(df, **params)
         df = remove_duplicate_rows(df)
 
         dupe_ds = list(df[df.index.duplicated()].index.drop_duplicates())  # [Andy] can use sum(df.index.duplicated())
@@ -187,22 +200,18 @@ class FindFrequency():
         params['minfreq'] = minfreq
         params['colfreqs'] = colfreqs
 
-        if df.empty:
-            raise ValueError("Detect empty df")
-        elif not colfreqs:
-            raise ValueError("Detect empty column frequency list. Should not proceed anymore.")
         return df, params
 
 
 
 #detect period part
-class PeriodDetect():
+class PeriodDetect(Adam):
     def __init__(self):
+        super().__init__()
         self.name = 'period_detect'
     
     def fit_transform(self, df, **params):
-        check_params(params)
-        check_df(df)
+        self._validate_params(self.name, df, **params)
         _colfreqs = params['colfreqs']
         _minfreq = params['minfreq']
 
@@ -245,14 +254,14 @@ class PeriodDetect():
         raise NoPeriodError("no period detected")
 
 #align data
-class AlignData():
+class AlignData(Adam):
     def __init__(self):
+        super().__init__()
         self.name = 'align_data'
 
     def fit_transform(self, df, **params):
         """aligns data according to sampling frequencies"""
-        check_params(params)
-        check_df(df)
+        self._validate_params(self.name, df, **params)
         _colfreqs = params['colfreqs']
         _minfreq = params['minfreq']
         aligned_df = {}
@@ -319,14 +328,15 @@ class AlignData():
         return aligned_df, params
 
 #drop extrema
-class DropExtrema():
+class DropExtrema(Adam):
     def __init__(self):
+        super().__init__()
         self.name = 'drop_extrema'
+
     def fit_transform(self, df, **params):  # [ANDY] confirmed ts has been aligned, no need to fill ts gaps in this func again
         """drop values beyond 2 standard deviations from the mean"""
         # calculate the points where the gap is more than n_max_fill*interval
-        if ('minfreq' not in params) | ('period' not in params):
-            raise ParamsError('Either minfreq or period or both is missing. Chronos+ cannot proceed.')
+        self._validate_params(self.name, df, **params)
 
         _minfreq = params['minfreq']
         _period = params['period'] 
@@ -361,11 +371,13 @@ class DropExtrema():
         return df, params
 
 #normalisation part
-class Normalizer():
+class Normalizer(Adam):
     def __init__(self):
+        super().__init__()
         self.name = 'normalizer'
 
     def fit_transform(self, df, **params):
+        self._validate_params(self.name, df, **params)
         modnorms = {y:( df[y].min(), df[y].max() ) for y in ycols}
         df['time_index'] = [((t-params['zeropoint'])//params['minfreq'])%params['period'] for t in df.index]  # [ANDY] period is matched to minfreq?
         return df, params
@@ -383,11 +395,13 @@ class Normalizer():
 
 
 #fill gap part
-class FillGap():
+class FillGap(Adam):
     def __init__(self):
+        super().__init__()
         self.name = 'fill_gap'
     
     def fit_transform(self, df, **params):
+        self._validate_params(self.name, df, **params)
         _colfreqs = params['colfreqs']
         _minfreq =params['minfreq']
         _period = params['period']

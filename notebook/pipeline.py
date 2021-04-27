@@ -20,6 +20,7 @@ class Pipeline():
             _transformer = _tasks[i]
             if _transformer is None:
                 print(f"Chronos+ skiped task {i} because transformer is None stype.")
+                continue
             
             if i == 0:
                 try:
@@ -30,7 +31,7 @@ class Pipeline():
                 try:
                     df, params = _transformer.fit_transform(df, **params)
                 except Exception as e:
-                    print(f'error at step {i}')
+                    print(f'error at step {i + 1}')
                     raise ValueError(e)
         
         return df, params
