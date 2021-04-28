@@ -32,12 +32,15 @@ class Adam:
             raise ParamsError(f'Lack minimal frequency data. Please ensure you called FindFrequency. Current step: {name}')
         if 'colfreqs' not in params:
             raise ParamsError(f'Lack column frequencies data. Please ensure you called FindFrequency.Current step: {name}')
-        if name in ['drop_extrema', 'normalizer', 'fill_gap']:
+        if name in ['drop_extrema', 'normalizer', 'fill_gap','generate_input']:
             if 'period' not in params:
                 raise ParamsError(f'Lack column period data. Please ensure you called PeriodDetect.Current step: {name}')
         if name in ['normalizer','fill_gap']:
             if 'zeropoint' not in params:
                 raise ParamsError(f'Lack column zeropoint data. Please ensure you called AlignData.Current step: {name}')
+        if name == 'generate_input':
+            if 'modnorms' not in params:
+                raise ParamsError(f'Lack column modnorms data. Please ensure you called Normalizer.Current step: {name}')
        
 
 class ParamsError(Exception):
@@ -379,6 +382,7 @@ class Normalizer(Adam):
     def fit_transform(self, df, **params):
         self._validate_params(self.name, df, **params)
         modnorms = {y:( df[y].min(), df[y].max() ) for y in ycols}
+        params['modnorms'] = modnorms
         df['time_index'] = [((t-params['zeropoint'])//params['minfreq'])%params['period'] for t in df.index]  # [ANDY] period is matched to minfreq?
         return df, params
 
@@ -393,6 +397,15 @@ class Normalizer(Adam):
 
 #     return median_profiles, time_index
 
+def get_median_profiles(df, ycols, period):  # [ANDY] get median profiles after dropping extreme values?
+    time_index = list(range(period))
+
+    median_profiles = pd.DataFrame(index=time_index)
+
+    for y in ycols:
+        median_profiles[y] = [df[df['time_index']==t][y].median() for t in time_index]
+
+    return median_profiles, time_index
 
 #fill gap part
 class FillGap(Adam):
@@ -405,7 +418,7 @@ class FillGap(Adam):
         _colfreqs = params['colfreqs']
         _minfreq =params['minfreq']
         _period = params['period']
-        _median_profiles, _time_index = self.get_median_profiles(df, ycols, _period)
+        _median_profiles, _time_index = get_median_profiles(df, ycols, _period)
         _zeropoint = params['zeropoint']
         # df = df.copy()
         firstts = df.index[0]
@@ -423,16 +436,6 @@ class FillGap(Adam):
 
         df['time_index'] = [((t-_zeropoint)//_minfreq)%_period for t in df.index]
         return df, params
-    
-    def get_median_profiles(self, df, ycols, period):  # [ANDY] get median profiles after dropping extreme values?
-        time_index = list(range(period))
-
-        median_profiles = pd.DataFrame(index=time_index)
-
-        for y in ycols:
-            median_profiles[y] = [df[df['time_index']==t][y].median() for t in time_index]
-
-        return median_profiles, time_index
 
     def gap_reindex(self, df, freq, firstts, lastts):
         # calculate the points where the gap is more than n_max_fill*freq
@@ -483,5 +486,53 @@ class FillGap(Adam):
         # small gaps interpolated linearly
         return df.interpolate(method='linear', limit_direction="both")
 
+def normdf(df, modnorms):
+    normed = df.copy()
+    for y, ( ymin, ymax ) in modnorms.items():
+        mmdiff = ymax - ymin
+        normed[y] = (normed[y]-ymin)/mmdiff
+    return normed
 
+#generate model input
+class GenerateInput(Adam):
+    def __init__(self):
+        super().__init__()
+        self.name = 'generate_input'
 
+    def fit_transform(df, offset=None, median_values=None, **params):
+        """
+        generate model input for windows ending at timestamps in the times arguments
+
+        Assumptions:
+            1. times all have the same time index relative to period
+            2. sampling intervals for each column are regular
+        """
+        self._validate_params(self.name, df, **params)
+        period = params['period']
+        modnorms = params['modnorms']
+        fullperiods = df.iloc[period-1:]  # [ANDY] why? should be period-1
+        times = fullperiods[fullperiods['time_index']==t].index
+        offset = period-1 if offset is None else offset
+        window_size = 10
+        rows = []
+        for t in times:
+            idx = df.index.get_loc(t)+1
+            rowdf = df.iloc[idx-period:idx].copy()
+            if median_values is not None and window_size<period:
+                replaceidx = rowdf.iloc[:len(rowdf)-window_size].index
+                rowdf.loc[replaceidx, ycols] = median_values.loc[rowdf.loc[replaceidx, "time_index"], ycols].to_numpy()
+            # normalize training/scoring data
+            rowdf = normdf(rowdf, modnorms)
+            startpos = period-1-offset
+            rowdf = rowdf.iloc[startpos:].append(rowdf.iloc[:startpos])  # [ANDY] why?
+            row = np.concatenate([rowdf[y].dropna() for y in ycols])
+            rows.append(row)
+
+        collens = set(len(r) for r in rows)
+        if len(collens)!=1:
+            logging.error(f"detected row lengths: {collens}")
+            raise MisalignedColumnsError("unable to create input data because dimensions don't match")
+
+        numcols = collens.pop()
+
+        return np.concatenate(rows).reshape(( -1, numcols )), params
