@@ -499,7 +499,7 @@ class GenerateInput(Adam):
         super().__init__()
         self.name = 'generate_input'
 
-    def fit_transform(df, offset=None, median_values=None, **params):
+    def fit_transform(self, df, offset=None, median_values=None, **params):
         """
         generate model input for windows ending at timestamps in the times arguments
 
@@ -510,6 +510,7 @@ class GenerateInput(Adam):
         self._validate_params(self.name, df, **params)
         period = params['period']
         modnorms = params['modnorms']
+        t = period -1 
         fullperiods = df.iloc[period-1:]  # [ANDY] why? should be period-1
         times = fullperiods[fullperiods['time_index']==t].index
         offset = period-1 if offset is None else offset
