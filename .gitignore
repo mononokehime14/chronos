@@ -1,8 +1,6 @@
 #ignore TensorBoard records
 notebook/runs/
 
-notebook/saved_models/
-
 notebook/__pycache__/
 
 notebook/preprocessing/__pycache__/
