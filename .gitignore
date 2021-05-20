@@ -5,6 +5,8 @@ notebook/saved_models/
 
 notebook/__pycache__/
 
+notebook/preprocessing/__pycache__/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
