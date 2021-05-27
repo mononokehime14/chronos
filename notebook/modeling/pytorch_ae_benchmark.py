@@ -17,11 +17,28 @@ from torch.utils.data.dataset import random_split
 from tqdm.notebook import trange, tqdm
 
 
-print(os.getcwd())
-#from notebook.modeling.pytorch_ae import AutoEncoder, ChronosDataset
 from .pytorch_ae import AutoEncoder, ChronosDataset
 
 def _fit(ae, train_loader, val_loader, epochs, batch_size, optimizer, lr, scheduler, loss_f, writer):
+    """This function is benchmark testing.
+    Without early stopping and with given learning rate, batch_size and epochs number,
+    it just trains the model and record training loss and validation loss for further comparision.
+
+    Args:
+        ae (nn.Module): autoencoder model
+        train_loader (DataLoader): training data set
+        val_loader (Dataloader): validation data set
+        epochs (int): epochs number
+        batch_size (int): batch size
+        optimizer (torch.optim.Adam): adam optimizer
+        lr (double): learning rate
+        scheduler (torch.optim.lr_scheduler.ReduceLROnPlateau): Adjust learning rate according to loss
+        loss_f (nn.MSELoss()): Loss function, just mean square loss between real data and prediction
+        writer (SummaryWriter): Tensorboard Writer
+
+    Returns:
+        loss_list and val_loss_list: records of training loss and validation loss in epochs scale.
+    """
     val_loss_list = []
     loss_list = []
     
@@ -60,6 +77,16 @@ def _fit(ae, train_loader, val_loader, epochs, batch_size, optimizer, lr, schedu
     return loss_list, val_loss_list
 
 def complement_memory_list(lst, max_size):
+    """Epochs number can be different, 
+    loss, val_loss of shorter epochs will be filled with NaN in order to align with longer ones
+
+    Args:
+        lst (list): loss list or val list
+        max_size ([type]): max length (epochs)
+
+    Returns:
+        list: complemented loss list or val list
+    """
     if len(lst) == max_size:
         return lst
     
@@ -69,6 +96,14 @@ def complement_memory_list(lst, max_size):
     return lst
 
 def model_benchmark(dat, epochs_list, lr_list, batchsize_list):
+    """Grid search, test all combinations of hyperparameters
+
+    Args:
+        dat (numpy array): training data
+        epochs_list (list): pool of epochs candidates
+        lr_list (list): pool of learning rates candidates
+        batchsize_list (list): pool of batchsizes candidates
+    """
 
     #prepare data
     train_len = int(len(dat) * 0.8)
@@ -76,13 +111,9 @@ def model_benchmark(dat, epochs_list, lr_list, batchsize_list):
     train_dat, val_dat = random_split(dat, [train_len, val_len])
     writer = SummaryWriter()
     first_layer = dat.shape[1]
-    layer_1 = max(math.floor(first_layer/4),30) #max(math.floor(n_inputs/4), 30)
-    layer_2 = max(math.floor(layer_1/4),15) #max(math.floor(n_units_1/4), 15)
+    layer_1 = max(math.floor(first_layer/4),30)
+    layer_2 = max(math.floor(layer_1/4),15) 
 
-#     model_candidates = []
-#     loss_list = []
-#     hyperparameter_list = []
-#     file_order = 0
     loss_df = pd.DataFrame()
     val_loss_df = pd.DataFrame()
     max_epoch = max(epochs_list)
@@ -90,8 +121,6 @@ def model_benchmark(dat, epochs_list, lr_list, batchsize_list):
     for batch_size in tqdm(batchsize_list):
         for lr in tqdm(lr_list):
             for epochs in tqdm(epochs_list):
-            #     tolerence_percentage = (i + 1) / 10.0
-            #     tolerence = EPOCHS * tolerence_percentage
                 train_loader = DataLoader(ChronosDataset(train_dat), batch_size, True)
                 val_loader = DataLoader(ChronosDataset(val_dat), batch_size, True)
                 ae = AutoEncoder(first_layer, layer_1, layer_2)
@@ -105,32 +134,12 @@ def model_benchmark(dat, epochs_list, lr_list, batchsize_list):
                 column_name = f'{batch_size}_{lr}_{epochs}'
                 loss_df[column_name] = loss_list
                 val_loss_df[column_name] = val_loss_list
-#                 filename = f"temperary_model/temp_model_{file_order}"
 
-#                 model_candidates.append(filename)
-#                 loss_list.append(best_loss)
-#                 hyperparameter_list.append((lr,epochs,tolerence))
-
-#                 try:
-#                     torch.save(best_ae,filename)
-#                 except Exception as e:
-#                     raise ValueError(e)
-
-#                 file_order += 1
-                                
-#     losses = np.array(loss_list)
-#     min_loss = losses.argmin()
-#     ae = torch.load(model_candidates[min_loss])
-#     ae.eval()
-
-#     print(loss_list[min_loss])
-#     print(hyperparameter_list[min_loss])
-#     print(ae.state_dict())
     return loss_df, val_loss_df
 
 
 class Benchmark():
-    def __init__(self, epochs_list=[10, 100], lr_list=[0.01,0.001], batchsize_list=[18,32]):
+    def __init__(self, epochs_list, lr_list, batchsize_list):
         self.epochs_list = epochs_list
         self.lr_list = lr_list
         self.batchsize_list = batchsize_list
@@ -145,6 +154,14 @@ class Benchmark():
                 raise ValueError('Benchmark test need lists of epochs, learning rates and batchsizes which are not present.')
         
     def fit_transform(self, dfs, **params):
+        """This function preceeds benchmark testing in pipeline
+
+        Args:
+            dfs (list of numpy arrays): training datasets
+
+        Returns:
+            loss and validation loss memory: records of losses for different combinations
+        """
         self._validate_lists(dfs)
         self._validate_lists()
         loss_memory = []

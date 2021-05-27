@@ -36,3 +36,13 @@ The notebook server will be accessible at http://localhost:8080/
 2. Connect to the server
 3. Upload the `notebook` directory
 4. Install the requirements in `notebook/requirements.txt`
+
+## Run Pipeline notebook
+
+### Run Training PyTorch Autoencoder model
+
+1. notebook/pytorch_model_training.ipynb
+
+### Run Benchmark Testing
+
+1. notebook/pytorch_model_benchmark.ipynb

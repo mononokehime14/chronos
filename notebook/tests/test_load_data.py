@@ -5,9 +5,7 @@ import sys
 
 
 from pandas.errors import EmptyDataError
-print(os.getcwd())
 sys.path.append("..")
-print(sys.path)
 from preprocessing.preprocessor import LoadData, MissingColumnError
 
 class TestLoadData(unittest.TestCase):

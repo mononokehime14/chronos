@@ -16,9 +16,10 @@ from keras import backend as K
 from sklearn.model_selection import train_test_split
 from tqdm.notebook import tnrange, tqdm
 
-# csv_path = "data/giordano-oct-nov.csv"
-# dscol = "Time"
-# ycols = ["SA1900282"]
+"""This file contains all pre-processing modules needed for training and testing
+Explainations of each module can be found from Chronos+ handover.ipynb or [ANDY]Chronos+ handover.ipynb
+Here, I just turn all precessing functions into callable classes, enable them to pass down data and other information to next module in pipeline.
+"""
 
 #general class for all
 class Adam:
@@ -27,11 +28,6 @@ class Adam:
         self.name = 'adam'
     
     def _validate_params(self, name, dfs, **params):
-        print(dfs[0].shape)
-        print(dfs[1].shape)
-        print(params.keys())
-        print(params['weekdays'].keys())
-        print(params['weekends'].keys())
         if len(dfs) == 0:
             raise DataError(f'Dataframes are empty! Error occur at {name} step.')
         
@@ -46,10 +42,15 @@ class Adam:
         if 'dscol' not in params:
             raise ParamsError(f'Lack dscol value. Please ensure you called LoadData. Current step: {name}')
         
-        if ('weekdays' not in params) | ('weekends' not in params):
-            raise ParamsError(f'Lack weekdays and weekends in params. Please ensure you called LoadData. Current step: {name}')
+        # if ('weekdays' not in params) | ('weekends' not in params):
+        #     raise ParamsError(f'Lack weekdays and weekends in params. Please ensure you called LoadData. Current step: {name}')
+        pattern_list = []
+        if 'weekdays' in params:
+            pattern_list.append('weekdays')
+        if 'weekends' in params:
+            pattern_list.append('weekends')
 
-        for _ in ['weekdays','weekends']:
+        for _ in pattern_list:
             if 'minfreq' not in params[_]:
                 raise ParamsError(f'Lack minimal frequency data. Please ensure you called FindFrequency. Current step: {name}')
             if 'colfreqs' not in params[_]:
@@ -66,7 +67,6 @@ class Adam:
             if name == 'left_pad':
                 if 'profile' not in params[_]:
                     raise ParamsError(f'Lack median profile data. Testing pipeline needs median profile data which is gained after training step FillGap.Current step: {name}')
-
 
 class ParamsError(Exception):
     def __init__(self, message, *args, **kwargs):
@@ -110,35 +110,24 @@ class LoadData(Adam):
         self._validate_params()
         _data_path = self.data_path
 
-        if self.predefined_params:
-            params = self.predefined_params
-            params['orient'] = False
-        else:
+        if not self.predefined_params:
             params['ycols'] = self.ycols
             params['dscol'] = self.dscol
-            params['weekdays'] = {}
-            params['weekends'] = {}
             params['orient'] = True
+        else:
+            params = self.predefined_params
+            params['orient'] = False
 
         if _data_path.split(".")[1] == 'csv':
             return self.ingest(_data_path, self.dscol, self.ycols), params
         elif _data_path.split(".")[1] == 'zip':
             return self.ingest_from_zip(_data_path, self.dscol, self.ycols), params
 
-        # if len(_data_path) == 0:
-        #     raise ValueError("The data path is empty")
-
-        # x = os.getcwd()
-        # print(x)
-        # dirname = os.getcwd()
-        # filename = os.path.join(dirname,_data_path)
-        # print(filename)
-
     def ingest(self, data_path, dscol, ycols):
         try:
             df = pd.read_csv(data_path)
-        except Exception as e:
-            raise ValueError(e)
+        except:
+            raise ValueError("cannot load data from csv file.")
 
         if dscol not in df:
             raise MissingColumnError(dscol)
@@ -164,12 +153,14 @@ class LoadData(Adam):
         return [df_weekdays, df_weekends]
     
     def ingest_from_zip(self, filename, dscol, ycols):
-        for zip_file in glob.glob(filename):
-            zf = zipfile.ZipFile(zip_file)
-            dfs = []
-            df_test = pd.DataFrame()
-            dfs = [pd.read_csv(zf.open(f)) for f in zf.namelist()]
-            df = pd.concat(dfs,ignore_index=True)
+        try:
+            for zip_file in glob.glob(filename):
+                zf = zipfile.ZipFile(zip_file)
+                dfs = []
+                dfs = [pd.read_csv(zf.open(f)) for f in zf.namelist()]
+                df = pd.concat(dfs,ignore_index=True)
+        except:
+            raise ValueError("cannot load data from zip file.")
             
         if dscol not in df:
             raise MissingColumnError(dscol)
@@ -287,6 +278,9 @@ class FindFrequency(Adam):
             if df.empty:
                 continue
 
+            if params['orient']:
+                params[current_pattern] = {}
+
             df = remove_duplicate_rows(df)
 
             dupe_ds = list(df[df.index.duplicated()].index.drop_duplicates())
@@ -370,9 +364,11 @@ class PeriodDetect(Adam):
             adjust_counts = []
             for idx in range(len(unique_vals)):
                 adjust_counts.append(np.sum(counts[np.where(unique_vals%unique_vals[idx]==0)]))
-            if(np.max(adjust_counts)>5):  # [ANDY] why 5?
-                params[current_pattern]['period'] = unique_vals[np.argmax(adjust_counts)]
-                continue
+
+            if len(adjust_counts) > 0:
+                if (np.max(adjust_counts)>5):  # [ANDY] why 5?
+                    params[current_pattern]['period'] = unique_vals[np.argmax(adjust_counts)]
+                    continue
             raise NoPeriodError("no period detected")
 
         return dfs, params
@@ -589,10 +585,8 @@ class FillGap(Adam):
             _period = params[current_pattern]['period']
             _median_profiles, _time_index = get_median_profiles(df, params['ycols'], _period)
             _zeropoint = params[current_pattern]['zeropoint']
-            print(f'ok1{i}')
             params[current_pattern]['profile'] = _median_profiles
             params[current_pattern]['time_index'] = _time_index
-            print(f'ok2{i}')
             # df = df.copy()
             firstts = df.index[0]
             lastts = df.index[-1]
@@ -611,11 +605,6 @@ class FillGap(Adam):
             if df.empty:
                 raise DataError(f'Data of {current_pattern} is lost in {self.name} session.')
             dfs[i] = df
-        print(dfs[0].shape)
-        print(dfs[1].shape)
-        print(params.keys())
-        print(params['weekdays'].keys())
-        print(params['weekends'].keys())
         return dfs, params
 
     def gap_reindex(self, df, freq, firstts, lastts):
@@ -682,7 +671,7 @@ class GenerateInput(Adam):
         self.offset = offset
         self.times = times
     
-    def generate_model_input(self, df, current_pattern, **params):
+    def generate_model_input(self, df, current_pattern, params):
         period = params[current_pattern]['period']
         modnorms = params[current_pattern]['modnorms']
         ycols = params['ycols']
@@ -739,7 +728,7 @@ class GenerateInput(Adam):
                 current_pattern = 'weekends'
             if df.empty:
                 continue        
-            dfs[i] = self.generate_model_input(df, current_pattern, **params)
+            dfs[i] = self.generate_model_input(df, current_pattern, params)
         return dfs, params
 
 
